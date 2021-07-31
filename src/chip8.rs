@@ -60,7 +60,7 @@ pub fn init<'a>(
 }
 
 impl Chip8 {
-    pub fn emu_cycle(&mut self, draw_scale: usize) {
+    pub fn emu_cycle(&mut self, draw_scale: usize, speed: u32) {
         loop {
             self.keypad = [false; 16];
 
@@ -84,12 +84,13 @@ impl Chip8 {
             if self.sound_timer > 0 {
                 if self.sound_timer == 1 {
                     println!("beep!");
+                    break;
                 }
                 self.sound_timer -= 1;
             }
 
             self.draw_canvas(draw_scale);
-            std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+            std::thread::sleep(Duration::new(0, 1_000_000_000u32 / (60 * speed)));
         }
     }
 
@@ -123,6 +124,17 @@ impl Chip8 {
     /// https://en.wikipedia.org/wiki/CHIP-8#Opcode_table
     fn process_opcode(&mut self) {
         println!("{:#06x}", self.opcode);
+
+        let x = ((self.opcode & 0x0F00) >> 8) as usize;
+        let y = ((self.opcode & 0x00F0) >> 4) as usize;
+        let vx = self.regs[x];
+        let vy = self.regs[y];
+        let nnn = self.opcode & 0x0FFF;
+        let nn = (self.opcode & 0x00FF) as u8;
+        let n = (self.opcode & 0x000F) as u8;
+
+        self.pc += 2;
+
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x00FF {
                 // clear screen
@@ -130,121 +142,97 @@ impl Chip8 {
                     for i in 0..(64 * 32) {
                         self.px_grid[i] = false;
                     }
-                    self.pc += 2;
                 }
                 // return
                 0x00EE => {
                     self.stack_ptr -= 1;
                     self.pc = self.stack[self.stack_ptr as usize];
-                    self.pc += 2;
                 }
                 _ => {
                     println!("WARN: Opcode unknown: {:#06x}", self.opcode);
                 }
             },
-            // goto
+            // goto nnn
             0x1000 => {
-                self.pc = self.opcode & 0x0FFF;
+                self.pc = nnn;
             }
             // call()
             0x2000 => {
                 self.stack[self.stack_ptr as usize] = self.pc;
                 self.stack_ptr += 1;
-                self.pc = self.opcode & 0x0FFF;
+                self.pc = nnn;
             }
             // if vx == nn
             0x3000 => {
-                if self.regs[((self.opcode & 0x0F00) >> 8) as usize] == (self.opcode & 0x00FF) as u8
-                {
-                    self.pc += 4;
-                } else {
+                if vx == nn {
                     self.pc += 2;
                 }
             }
             // if Vx != nn
             0x4000 => {
-                if self.regs[((self.opcode & 0x0F00) >> 8) as usize] != (self.opcode & 0x00FF) as u8
-                {
-                    self.pc += 4;
-                } else {
+                if vx != nn {
                     self.pc += 2;
                 }
             }
             // if vx == vy
             0x5000 => {
-                if self.regs[((self.opcode & 0x0F00) >> 8) as usize]
-                    == self.regs[((self.opcode & 0x00F0) >> 4) as usize]
-                {
-                    self.pc += 4;
-                } else {
+                if vx == vy {
                     self.pc += 2;
                 }
             }
             // vx = n
             0x6000 => {
-                self.regs[((self.opcode & 0x0F00) >> 8) as usize] = (self.opcode & 0x00FF) as u8;
-                self.pc += 2;
+                self.regs[x] = nn;
             }
             // vx += n
             0x7000 => {
-                self.regs[((self.opcode & 0x0F00) >> 8) as usize] += (self.opcode & 0x00FF) as u8;
-                self.pc += 2;
+                self.regs[x] += n;
             }
             0x8000 => {
-                let x = ((self.opcode & 0x0F00) >> 8) as usize;
-                let y = ((self.opcode & 0x00F0) >> 4) as usize;
                 match self.opcode & 0x000F {
                     //vx = vy
                     0x0000 => {
                         self.regs[x] = self.regs[y];
-                        self.pc += 2;
                     }
                     //vx = vx | vy
                     0x0001 => {
                         self.regs[x] = self.regs[x] | self.regs[y];
-                        self.pc += 2;
                     }
                     //vx = vx & vy
                     0x0002 => {
                         self.regs[x] = self.regs[x] & self.regs[y];
-                        self.pc += 2;
                     }
                     //vx = vx ^ vy
                     0x0003 => {
                         self.regs[x] = self.regs[x] ^ self.regs[y];
-                        self.pc += 2;
                     }
                     //vx += vy
                     0x0004 => {
-                        self.regs[x] = self.regs[x] + self.regs[y];
-                        self.pc += 2;
+                        let (res, overflow) = self.regs[x].overflowing_add(self.regs[y]);
+                        self.regs[0xF] = if overflow { 1 } else { 0 };
+                        self.regs[x] = res;
                     }
                     //vx -= vy
                     0x0005 => {
-                        self.regs[x] = self.regs[x] - self.regs[y];
-                        self.pc += 2;
+                        let (res, overflow) = self.regs[x].overflowing_sub(self.regs[y]);
+                        self.regs[0xF] = if overflow { 1 } else { 0 };
+                        self.regs[x] = res;
                     }
                     // vx >>= 1, stores most sig bit in vF
                     0x0006 => {
                         self.regs[0xF] = self.regs[x] & 0x1;
                         self.regs[x] >>= 1;
-                        self.pc += 2;
                     }
                     // vx = vy - vx
                     0x0007 => {
-                        if self.regs[x] > self.regs[y] {
-                            self.regs[0xF] = 1;
-                        } else {
-                            self.regs[0xF] = 0;
-                        }
-                        self.regs[x] = self.regs[y] - self.regs[x];
-                        self.pc += 2;
+                        let (res, overflow) = self.regs[y].overflowing_sub(self.regs[x]);
+                        self.regs[0xF] = if overflow { 1 } else { 0 };
+                        self.regs[x] = res;
                     }
                     // vx <<= 1, stores most sig bit in vF
                     0x000E => {
                         self.regs[0xF] = self.regs[x] >> 7;
                         self.regs[x] <<= 1;
-                        self.pc += 2;
                     }
                     _ => {
                         println!("WARN: Opcode unknown: {:#06x}", self.opcode);
@@ -253,43 +241,33 @@ impl Chip8 {
             }
             // if vx != vy
             0x9000 => {
-                if self.regs[((self.opcode & 0x0F00) >> 8) as usize]
-                    != self.regs[((self.opcode & 0x00F0) >> 4) as usize]
-                {
-                    self.pc += 4;
-                } else {
+                if vx != vy {
                     self.pc += 2;
                 }
             }
             // I = nnn
             0xA000 => {
-                self.addr = self.opcode & 0x0FFF;
-                self.pc += 2;
+                self.addr = nnn;
             }
             // goto nnn + v0
             0xB000 => {
-                self.pc = (self.opcode & 0x0FFF) + self.regs[0x0] as u16;
+                self.pc = nnn + self.regs[0] as u16;
             }
-            // vx = nn + rnd(0,255)
+            // vx = rnd(0,255) & nn
             0xC000 => {
                 let mut rng = rand::thread_rng();
-                self.regs[((self.opcode & 0x0F00) >> 8) as usize] =
-                    rng.gen_range(0..0xFF) + (self.opcode & 0x00FF) as u8;
-                self.pc += 2;
+                self.regs[x] = rng.gen_range(0..0xFF) & nn;
             }
             // draw at (vx,vy) sprite 8x(N+1) px
             0xD000 => {
-                let x = self.regs[((self.opcode & 0x0F00) >> 8) as usize];
-                let y = self.regs[((self.opcode & 0x00F0) >> 4) as usize];
-                let height = (self.opcode & 0x000F) as u8;
                 let mut px: u16;
 
-                for yline in 0..height {
+                for yline in 0..n {
                     px = self.mem[(self.addr + yline as u16) as usize] as u16;
                     for xline in 0..9 {
                         // checking if the (x,y) bit is 1
-                        let x_pos = ((x + xline) % 64) as usize;
-                        let y_pos = ((y + yline) % 32) as usize;
+                        let x_pos = ((vx + xline) % 64) as usize;
+                        let y_pos = ((vy + yline) % 32) as usize;
                         if (px & (0x80 >> xline)) != 0 {
                             if self.px_grid[x_pos + (y_pos * 64)] {
                                 self.regs[0xF] = 1;
@@ -298,22 +276,17 @@ impl Chip8 {
                         }
                     }
                 }
-                self.pc += 2;
             }
             0xE000 => match self.opcode & 0x00FF {
                 // if pressed_key == vx
                 0x009E => {
-                    if self.keypad[self.regs[((self.opcode & 0x0F00) >> 8) as usize] as usize] {
-                        self.pc += 4;
-                    } else {
+                    if self.keypad[vx as usize] {
                         self.pc += 2;
                     }
                 }
                 // if pressed_key != vx
                 0x00A1 => {
-                    if !self.keypad[self.regs[((self.opcode & 0x0F00) >> 8) as usize] as usize] {
-                        self.pc += 4;
-                    } else {
+                    if !self.keypad[vx as usize] {
                         self.pc += 2;
                     }
                 }
@@ -324,54 +297,44 @@ impl Chip8 {
             0xF000 => match self.opcode & 0x00FF {
                 // vx = delay
                 0x0007 => {
-                    self.regs[((self.opcode & 0x0F00) >> 8) as usize] = self.delay_timer;
-                    self.pc += 2;
+                    self.regs[x] = self.delay_timer;
                 }
                 // vx = wait_for_key() - blocks program
                 0x000A => {
                     let mut key_pressed = false;
                     for (i, key) in self.keypad.iter().enumerate() {
                         if *key {
-                            self.regs[((self.opcode & 0x0F00) >> 8) as usize] = i as u8;
+                            self.regs[x] = i as u8;
                             key_pressed = true;
                             break;
                         }
                     }
 
                     if !key_pressed {
-                        return; // without increasing PC, keeps waiting for key
+                        self.pc -= 2;
                     }
-                    self.pc += 2;
                 }
                 // delay_timer = vx
                 0x0015 => {
-                    self.delay_timer = self.regs[((self.opcode & 0x0F00) >> 8) as usize];
-                    self.pc += 2;
+                    self.delay_timer = vx;
                 }
                 // sound_timer = vx
                 0x0018 => {
-                    self.sound_timer = self.regs[((self.opcode & 0x0F00) >> 8) as usize];
-                    self.pc += 2;
+                    self.sound_timer = vx;
                 }
                 // I += vx
                 0x001E => {
-                    self.addr += self.regs[((self.opcode & 0x0F00) >> 8) as usize] as u16;
-                    self.pc += 2;
+                    self.addr += vx as u16;
                 }
                 // I = sprite_addr[vx]
                 0x0029 => {
-                    self.addr = (self.regs[((self.opcode & 0x0F00) >> 8) as usize] * 0x5) as u16;
-                    self.pc += 2;
+                    self.addr = (vx * 0x5) as u16;
                 }
                 // store binary-coded decimal vx at I, I+1, I+2
                 0x0033 => {
-                    self.mem[self.addr as usize] =
-                        self.regs[((self.opcode & 0x0F00) >> 8) as usize] / 100;
-                    self.mem[(self.addr + 1) as usize] =
-                        self.regs[((self.opcode & 0x0F00) >> 8) as usize] / 10 % 10;
-                    self.mem[(self.addr + 2) as usize] =
-                        self.regs[((self.opcode & 0x0F00) >> 8) as usize] / 100 % 10;
-                    self.pc += 2;
+                    self.mem[self.addr as usize] = vx / 100;
+                    self.mem[(self.addr + 1) as usize] = vx / 10 % 10;
+                    self.mem[(self.addr + 2) as usize] = vx / 100 % 10;
                 }
                 // save v0-x in mem starting at I
                 0x0055 => {
@@ -380,7 +343,6 @@ impl Chip8 {
                         self.mem[self.addr as usize + 1] = self.regs[i as usize];
                     }
                     self.addr += x + 1;
-                    self.pc += 2;
                 }
                 // load v0-x from mem starting at I
                 0x0065 => {
@@ -389,7 +351,6 @@ impl Chip8 {
                         self.regs[i as usize] = self.mem[self.addr as usize + 1];
                     }
                     self.addr += x + 1;
-                    self.pc += 2;
                 }
                 _ => {
                     println!("WARN: Opcode unknown: {:#06x}", self.opcode);

@@ -4,6 +4,7 @@ use std::fs;
 
 // sdl window scale
 const SCALE: u32 = 10;
+const SPEED: u32 = 6;
 
 fn main() {
     let sdl_context = sdl2::init().unwrap();
@@ -19,5 +20,5 @@ fn main() {
 
     let program = fs::read("./Cave.ch8").expect("Error reading file");
     let mut chip8 = chip8::init(fontset::FONTSET, program, canvas, events);
-    chip8.emu_cycle(SCALE as usize);
+    chip8.emu_cycle(SCALE as usize, SPEED);
 }

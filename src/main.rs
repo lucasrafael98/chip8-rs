@@ -18,7 +18,7 @@ fn main() {
 
     let canvas = window.into_canvas().build().unwrap();
 
-    let program = fs::read("./Cave.ch8").expect("Error reading file");
+    let program = fs::read("./data/15PUZZLE").expect("Error reading file");
     let mut chip8 = chip8::init(fontset::FONTSET, program, canvas, events);
     chip8.emu_cycle(SCALE as usize, SPEED);
 }

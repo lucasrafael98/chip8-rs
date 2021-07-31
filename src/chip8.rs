@@ -15,19 +15,19 @@ pub struct Chip8 {
     regs: [u8; 16],
     // usually called I
     addr: u16,
-    // program counter
     pc: u16,
     sound_timer: u8,
     delay_timer: u8,
     stack: [u16; 16],
-    stack_ptr: u16,
+    sp: u16,
     px_grid: [bool; 64 * 32],
     canvas: Canvas<Window>,
     keypad: [bool; 16],
     events: sdl2::EventPump,
+    redraw: bool,
 }
 
-pub fn init<'a>(
+pub fn init(
     fontset: &[u8; 80],
     program: Vec<u8>,
     canvas: Canvas<Window>,
@@ -42,11 +42,12 @@ pub fn init<'a>(
         sound_timer: 0,
         delay_timer: 0,
         stack: [0; 16],
-        stack_ptr: 0,
+        sp: 0,
         px_grid: [false; 64 * 32],
         canvas: canvas,
         keypad: [false; 16],
         events: events,
+        redraw: false,
     };
     for (i, _) in fontset.iter().enumerate() {
         chip8.mem[i] = fontset[i];
@@ -62,9 +63,10 @@ pub fn init<'a>(
 impl Chip8 {
     pub fn emu_cycle(&mut self, draw_scale: usize, speed: u32) {
         loop {
-            self.keypad = [false; 16];
+            self.redraw = false;
 
             self.handle_keys();
+            println!("{:?}", self.keypad);
             if self
                 .events
                 .keyboard_state()
@@ -89,7 +91,9 @@ impl Chip8 {
                 self.sound_timer -= 1;
             }
 
-            self.draw_canvas(draw_scale);
+            if self.redraw {
+                self.draw_canvas(draw_scale);
+            }
             std::thread::sleep(Duration::new(0, 1_000_000_000u32 / (60 * speed)));
         }
     }
@@ -136,7 +140,7 @@ impl Chip8 {
         self.pc += 2;
 
         match self.opcode & 0xF000 {
-            0x0000 => match self.opcode & 0x00FF {
+            0x0000 => match nn {
                 // clear screen
                 0x00E0 => {
                     for i in 0..(64 * 32) {
@@ -145,8 +149,8 @@ impl Chip8 {
                 }
                 // return
                 0x00EE => {
-                    self.stack_ptr -= 1;
-                    self.pc = self.stack[self.stack_ptr as usize];
+                    self.sp -= 1;
+                    self.pc = self.stack[self.sp as usize];
                 }
                 _ => {
                     println!("WARN: Opcode unknown: {:#06x}", self.opcode);
@@ -158,8 +162,8 @@ impl Chip8 {
             }
             // call()
             0x2000 => {
-                self.stack[self.stack_ptr as usize] = self.pc;
-                self.stack_ptr += 1;
+                self.stack[self.sp as usize] = self.pc;
+                self.sp += 1;
                 self.pc = nnn;
             }
             // if vx == nn
@@ -189,7 +193,7 @@ impl Chip8 {
                 self.regs[x] += n;
             }
             0x8000 => {
-                match self.opcode & 0x000F {
+                match n {
                     //vx = vy
                     0x0000 => {
                         self.regs[x] = self.regs[y];
@@ -261,23 +265,26 @@ impl Chip8 {
             // draw at (vx,vy) sprite 8x(N+1) px
             0xD000 => {
                 let mut px: u16;
+                self.regs[0xF] = 0;
 
                 for yline in 0..n {
                     px = self.mem[(self.addr + yline as u16) as usize] as u16;
-                    for xline in 0..9 {
+                    for xline in 0..8 {
                         // checking if the (x,y) bit is 1
                         let x_pos = ((vx + xline) % 64) as usize;
                         let y_pos = ((vy + yline) % 32) as usize;
-                        if (px & (0x80 >> xline)) != 0 {
-                            if self.px_grid[x_pos + (y_pos * 64)] {
-                                self.regs[0xF] = 1;
-                            }
-                            self.px_grid[x_pos + (y_pos * 64)] ^= true;
+
+                        let color = (px >> (7 - xline as u16)) & 1;
+                        if color != 0 {
+                            self.regs[0xF] |=
+                                (color & self.px_grid[x_pos + (y_pos * 64)] as u16) as u8;
                         }
+                        self.px_grid[x_pos + (y_pos * 64)] ^= color != 0;
                     }
                 }
+                self.redraw = true;
             }
-            0xE000 => match self.opcode & 0x00FF {
+            0xE000 => match nn {
                 // if pressed_key == vx
                 0x009E => {
                     if self.keypad[vx as usize] {
@@ -294,7 +301,7 @@ impl Chip8 {
                     println!("WARN: Opcode unknown: {:#06x}", self.opcode);
                 }
             },
-            0xF000 => match self.opcode & 0x00FF {
+            0xF000 => match nn {
                 // vx = delay
                 0x0007 => {
                     self.regs[x] = self.delay_timer;
@@ -468,6 +475,103 @@ impl Chip8 {
                     ..
                 } => {
                     self.keypad[15] = true;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Num1),
+                    ..
+                } => {
+                    self.keypad[0] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Num2),
+                    ..
+                } => {
+                    self.keypad[1] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Num3),
+                    ..
+                } => {
+                    self.keypad[2] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Num4),
+                    ..
+                } => {
+                    self.keypad[3] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Q),
+                    ..
+                } => {
+                    self.keypad[4] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::W),
+                    ..
+                } => {
+                    self.keypad[5] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::E),
+                    ..
+                } => {
+                    self.keypad[6] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => {
+                    self.keypad[7] = false;
+                }
+
+                Event::KeyUp {
+                    keycode: Some(Keycode::A),
+                    ..
+                } => {
+                    self.keypad[8] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::S),
+                    ..
+                } => {
+                    self.keypad[9] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::D),
+                    ..
+                } => {
+                    self.keypad[10] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::F),
+                    ..
+                } => {
+                    self.keypad[11] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::Z),
+                    ..
+                } => {
+                    self.keypad[12] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::X),
+                    ..
+                } => {
+                    self.keypad[13] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::C),
+                    ..
+                } => {
+                    self.keypad[14] = false;
+                }
+                Event::KeyUp {
+                    keycode: Some(Keycode::V),
+                    ..
+                } => {
+                    self.keypad[15] = false;
                 }
                 _ => {}
             }

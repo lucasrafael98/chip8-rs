@@ -10,7 +10,8 @@ pub struct Chip8 {
     mem: [u8; 4096],
     // vx = registers
     regs: [u8; 16],
-    I: u16,
+    // usually called I
+    addr: u16,
     // program counter
     pc: u16,
     sound_timer: u8,
@@ -27,7 +28,7 @@ pub fn init(fontset: &[u8; 80], program: Vec<u8>, canvas: Canvas<Window>) -> Chi
         opcode: 0,
         mem: [0; 4096],
         regs: [0; 16],
-        I: 0,
+        addr: 0,
         pc: 0x200,
         sound_timer: 0,
         delay_timer: 0,
@@ -193,7 +194,7 @@ impl Chip8 {
             }
             // I = nnn
             0xA000 => {
-                self.I = self.opcode & 0x0FFF;
+                self.addr = self.opcode & 0x0FFF;
                 self.pc += 2;
             }
             // goto nnn + v0
@@ -216,7 +217,7 @@ impl Chip8 {
                 let mut px: u16;
 
                 for yline in 0..height {
-                    px = self.mem[(self.I + yline as u16) as usize] as u16;
+                    px = self.mem[(self.addr + yline as u16) as usize] as u16;
                     println!("\tPixel:\t{:#06x}", px);
                     for xline in 0..9 {
                         // checking if the (x,y) bit is 1
@@ -287,21 +288,21 @@ impl Chip8 {
                 }
                 // I += vx
                 0x001E => {
-                    self.I += self.regs[((self.opcode & 0x0F00) >> 8) as usize] as u16;
+                    self.addr += self.regs[((self.opcode & 0x0F00) >> 8) as usize] as u16;
                     self.pc += 2;
                 }
                 // I = sprite_addr[vx]
                 0x0029 => {
-                    self.I = (self.regs[((self.opcode & 0x0F00) >> 8) as usize] * 0x5) as u16;
+                    self.addr = (self.regs[((self.opcode & 0x0F00) >> 8) as usize] * 0x5) as u16;
                     self.pc += 2;
                 }
                 // store binary-coded decimal vx at I, I+1, I+2
                 0x0033 => {
-                    self.mem[self.I as usize] =
+                    self.mem[self.addr as usize] =
                         self.regs[((self.opcode & 0x0F00) >> 8) as usize] / 100;
-                    self.mem[(self.I + 1) as usize] =
+                    self.mem[(self.addr + 1) as usize] =
                         self.regs[((self.opcode & 0x0F00) >> 8) as usize] / 10 % 10;
-                    self.mem[(self.I + 2) as usize] =
+                    self.mem[(self.addr + 2) as usize] =
                         self.regs[((self.opcode & 0x0F00) >> 8) as usize] / 100 % 10;
                     self.pc += 2;
                 }
@@ -309,18 +310,18 @@ impl Chip8 {
                 0x0055 => {
                     let x = (self.opcode & 0x0F00) >> 8;
                     for i in 0..(x + 1) {
-                        self.mem[self.I as usize + 1] = self.regs[i as usize];
+                        self.mem[self.addr as usize + 1] = self.regs[i as usize];
                     }
-                    self.I += x + 1;
+                    self.addr += x + 1;
                     self.pc += 2;
                 }
                 // load v0-x from mem starting at I
                 0x0065 => {
                     let x = (self.opcode & 0x0F00) >> 8;
                     for i in 0..(x + 1) {
-                        self.regs[i as usize] = self.mem[self.I as usize + 1];
+                        self.regs[i as usize] = self.mem[self.addr as usize + 1];
                     }
-                    self.I += x + 1;
+                    self.addr += x + 1;
                     self.pc += 2;
                 }
                 _ => {

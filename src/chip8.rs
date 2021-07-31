@@ -1,4 +1,7 @@
 use rand::Rng;
+use sdl2::event::Event;
+use sdl2::keyboard::Keycode;
+use sdl2::keyboard::Scancode;
 use sdl2::pixels::Color;
 use sdl2::rect::Point;
 use sdl2::render::Canvas;
@@ -18,12 +21,18 @@ pub struct Chip8 {
     delay_timer: u8,
     stack: [u16; 16],
     stack_ptr: u16,
-    keypad: [bool; 16],
     px_grid: [bool; 64 * 32],
     canvas: Canvas<Window>,
+    keypad: [bool; 16],
+    events: sdl2::EventPump,
 }
 
-pub fn init(fontset: &[u8; 80], program: Vec<u8>, canvas: Canvas<Window>) -> Chip8 {
+pub fn init<'a>(
+    fontset: &[u8; 80],
+    program: Vec<u8>,
+    canvas: Canvas<Window>,
+    events: sdl2::EventPump,
+) -> Chip8 {
     let mut chip8 = Chip8 {
         opcode: 0,
         mem: [0; 4096],
@@ -34,9 +43,10 @@ pub fn init(fontset: &[u8; 80], program: Vec<u8>, canvas: Canvas<Window>) -> Chi
         delay_timer: 0,
         stack: [0; 16],
         stack_ptr: 0,
-        keypad: [false; 16],
         px_grid: [false; 64 * 32],
         canvas: canvas,
+        keypad: [false; 16],
+        events: events,
     };
     for (i, _) in fontset.iter().enumerate() {
         chip8.mem[i] = fontset[i];
@@ -50,10 +60,69 @@ pub fn init(fontset: &[u8; 80], program: Vec<u8>, canvas: Canvas<Window>) -> Chi
 }
 
 impl Chip8 {
+    pub fn emu_cycle(&mut self, draw_scale: usize) {
+        loop {
+            self.keypad = [false; 16];
+
+            self.handle_keys();
+            if self
+                .events
+                .keyboard_state()
+                .is_scancode_pressed(Scancode::Escape)
+            {
+                println!("Quitting...");
+                return;
+            }
+
+            let pc = self.pc as usize;
+            self.opcode = (self.mem[pc] as u16) << 8 | (self.mem[pc + 1] as u16);
+            self.process_opcode();
+
+            if self.delay_timer > 0 {
+                self.delay_timer -= 1;
+            }
+            if self.sound_timer > 0 {
+                if self.sound_timer == 1 {
+                    println!("beep!");
+                }
+                self.sound_timer -= 1;
+            }
+
+            self.draw_canvas(draw_scale);
+            std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 30));
+        }
+    }
+
+    fn draw_canvas(&mut self, draw_scale: usize) {
+        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
+        let mut to_draw = Vec::new();
+
+        for x in 0..64 {
+            for y in 0..32 {
+                if self.px_grid[x + y * 64] {
+                    for x1 in 0..draw_scale {
+                        for y1 in 0..draw_scale {
+                            to_draw.push(Point::from((
+                                (x * draw_scale + x1) as i32,
+                                (y * draw_scale + y1) as i32,
+                            )))
+                        }
+                    }
+                }
+            }
+        }
+
+        self.canvas
+            .draw_points(&to_draw[..])
+            .expect("Error drawing!");
+
+        self.canvas.present();
+    }
+
     /// Processes CHIP8 Opcodes.
     /// https://en.wikipedia.org/wiki/CHIP-8#Opcode_table
     fn process_opcode(&mut self) {
-        println!("Opcode:\t{:#06x}", self.opcode);
+        println!("{:#06x}", self.opcode);
         match self.opcode & 0xF000 {
             0x0000 => match self.opcode & 0x00FF {
                 // clear screen
@@ -212,13 +281,11 @@ impl Chip8 {
             0xD000 => {
                 let x = self.regs[((self.opcode & 0x0F00) >> 8) as usize];
                 let y = self.regs[((self.opcode & 0x00F0) >> 4) as usize];
-                println!("\tx: {}, y: {}", x, y);
                 let height = (self.opcode & 0x000F) as u8;
                 let mut px: u16;
 
                 for yline in 0..height {
                     px = self.mem[(self.addr + yline as u16) as usize] as u16;
-                    println!("\tPixel:\t{:#06x}", px);
                     for xline in 0..9 {
                         // checking if the (x,y) bit is 1
                         let x_pos = ((x + xline) % 64) as usize;
@@ -334,44 +401,115 @@ impl Chip8 {
         }
     }
 
-    pub fn emu_cycle(&mut self) {
-        loop {
-            let pc = self.pc as usize;
-            self.opcode = (self.mem[pc] as u16) << 8 | (self.mem[pc + 1] as u16);
-            self.process_opcode();
-
-            if self.delay_timer > 0 {
-                self.delay_timer -= 1;
-            }
-            if self.sound_timer > 0 {
-                if self.sound_timer == 1 {
-                    println!("beep!");
+    fn handle_keys(&mut self) {
+        for event in self.events.poll_iter() {
+            match event {
+                Event::Quit { .. }
+                | Event::KeyDown {
+                    keycode: Some(Keycode::Escape),
+                    ..
+                } => {
+                    break;
                 }
-                self.sound_timer -= 1;
-            }
-
-            self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-            let mut to_draw = Vec::new();
-
-            for x in 0..64 {
-                for y in 0..32 {
-                    if self.px_grid[x + y * 64] {
-                        for x1 in 0..10 {
-                            for y1 in 0..10 {
-                                to_draw
-                                    .push(Point::from(((x * 10 + x1) as i32, (y * 10 + y1) as i32)))
-                            }
-                        }
-                    }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num1),
+                    ..
+                } => {
+                    self.keypad[0] = true;
                 }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num2),
+                    ..
+                } => {
+                    self.keypad[1] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num3),
+                    ..
+                } => {
+                    self.keypad[2] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Num4),
+                    ..
+                } => {
+                    self.keypad[3] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Q),
+                    ..
+                } => {
+                    self.keypad[4] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::W),
+                    ..
+                } => {
+                    self.keypad[5] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::E),
+                    ..
+                } => {
+                    self.keypad[6] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::R),
+                    ..
+                } => {
+                    self.keypad[7] = true;
+                }
+
+                Event::KeyDown {
+                    keycode: Some(Keycode::A),
+                    ..
+                } => {
+                    self.keypad[8] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::S),
+                    ..
+                } => {
+                    self.keypad[9] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::D),
+                    ..
+                } => {
+                    self.keypad[10] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::F),
+                    ..
+                } => {
+                    self.keypad[11] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::Z),
+                    ..
+                } => {
+                    self.keypad[12] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::X),
+                    ..
+                } => {
+                    self.keypad[13] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::C),
+                    ..
+                } => {
+                    self.keypad[14] = true;
+                }
+                Event::KeyDown {
+                    keycode: Some(Keycode::V),
+                    ..
+                } => {
+                    self.keypad[15] = true;
+                }
+                _ => {}
             }
-
-            self.canvas
-                .draw_points(&to_draw[..])
-                .expect("Error drawing!");
-
-            self.canvas.present();
-            std::thread::sleep(Duration::new(0, 1_000_000_000u32 / 60));
         }
     }
 }

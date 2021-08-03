@@ -66,7 +66,6 @@ impl Chip8 {
             self.redraw = false;
 
             self.handle_keys();
-            println!("{:?}", self.keypad);
             if self
                 .events
                 .keyboard_state()
@@ -86,7 +85,6 @@ impl Chip8 {
             if self.sound_timer > 0 {
                 if self.sound_timer == 1 {
                     println!("beep!");
-                    break;
                 }
                 self.sound_timer -= 1;
             }
@@ -99,15 +97,24 @@ impl Chip8 {
     }
 
     fn draw_canvas(&mut self, draw_scale: usize) {
-        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
-        let mut to_draw = Vec::new();
+        let mut to_draw_white = Vec::new();
+        let mut to_draw_black = Vec::new();
 
         for x in 0..64 {
             for y in 0..32 {
                 if self.px_grid[x + y * 64] {
                     for x1 in 0..draw_scale {
                         for y1 in 0..draw_scale {
-                            to_draw.push(Point::from((
+                            to_draw_white.push(Point::from((
+                                (x * draw_scale + x1) as i32,
+                                (y * draw_scale + y1) as i32,
+                            )))
+                        }
+                    }
+                } else {
+                    for x1 in 0..draw_scale {
+                        for y1 in 0..draw_scale {
+                            to_draw_black.push(Point::from((
                                 (x * draw_scale + x1) as i32,
                                 (y * draw_scale + y1) as i32,
                             )))
@@ -116,9 +123,14 @@ impl Chip8 {
                 }
             }
         }
-
+        self.canvas.set_draw_color(Color::RGB(255, 255, 255));
         self.canvas
-            .draw_points(&to_draw[..])
+            .draw_points(&to_draw_white[..])
+            .expect("Error drawing!");
+
+        self.canvas.set_draw_color(Color::RGB(0, 0, 0));
+        self.canvas
+            .draw_points(&to_draw_black[..])
             .expect("Error drawing!");
 
         self.canvas.present();
@@ -127,8 +139,6 @@ impl Chip8 {
     /// Processes CHIP8 Opcodes.
     /// https://en.wikipedia.org/wiki/CHIP-8#Opcode_table
     fn process_opcode(&mut self) {
-        println!("{:#06x}", self.opcode);
-
         let x = ((self.opcode & 0x0F00) >> 8) as usize;
         let y = ((self.opcode & 0x00F0) >> 4) as usize;
         let vx = self.regs[x];

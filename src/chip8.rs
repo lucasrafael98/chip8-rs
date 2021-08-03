@@ -382,205 +382,105 @@ impl Chip8 {
     fn handle_keys(&mut self) {
         for event in self.events.poll_iter() {
             match event {
-                Event::Quit { .. }
-                | Event::KeyDown {
-                    keycode: Some(Keycode::Escape),
-                    ..
-                } => {
+                Event::Quit { .. } | Event::KeyDown {keycode: Some(Keycode::Escape),..} => {
                     break;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Num1),
-                    ..
-                } => {
-                    self.keypad[0] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Num2),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::Num1),..} => {
                     self.keypad[1] = true;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Num3),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::Num2),..} => {
                     self.keypad[2] = true;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Num4),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::Num3),..} => {
                     self.keypad[3] = true;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Q),
-                    ..
-                } => {
-                    self.keypad[4] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::W),
-                    ..
-                } => {
-                    self.keypad[5] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::E),
-                    ..
-                } => {
-                    self.keypad[6] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::R),
-                    ..
-                } => {
-                    self.keypad[7] = true;
-                }
-
-                Event::KeyDown {
-                    keycode: Some(Keycode::A),
-                    ..
-                } => {
-                    self.keypad[8] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::S),
-                    ..
-                } => {
-                    self.keypad[9] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::D),
-                    ..
-                } => {
-                    self.keypad[10] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::F),
-                    ..
-                } => {
-                    self.keypad[11] = true;
-                }
-                Event::KeyDown {
-                    keycode: Some(Keycode::Z),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::Num4),..} => {
                     self.keypad[12] = true;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::X),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::Q),..} => {
+                    self.keypad[4] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::W),..} => {
+                    self.keypad[5] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::E),..} => {
+                    self.keypad[6] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::R),..} => {
                     self.keypad[13] = true;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::C),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::A),..} => {
+                    self.keypad[7] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::S),..} => {
+                    self.keypad[8] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::D),..} => {
+                    self.keypad[9] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::F),..} => {
                     self.keypad[14] = true;
                 }
-                Event::KeyDown {
-                    keycode: Some(Keycode::V),
-                    ..
-                } => {
+                Event::KeyDown {keycode: Some(Keycode::Z),..} => {
+                    self.keypad[10] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::X),..} => {
+                    self.keypad[0] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::C),..} => {
+                    self.keypad[11] = true;
+                }
+                Event::KeyDown {keycode: Some(Keycode::V),..} => {
                     self.keypad[15] = true;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::Num1),
-                    ..
-                } => {
-                    self.keypad[0] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::Num2),
-                    ..
-                } => {
+
+
+                Event::KeyUp {keycode: Some(Keycode::Num1),..} => {
                     self.keypad[1] = false;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::Num3),
-                    ..
-                } => {
+                Event::KeyUp {keycode: Some(Keycode::Num2),..} => {
                     self.keypad[2] = false;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::Num4),
-                    ..
-                } => {
+                Event::KeyUp {keycode: Some(Keycode::Num3),..} => {
                     self.keypad[3] = false;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::Q),
-                    ..
-                } => {
-                    self.keypad[4] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::W),
-                    ..
-                } => {
-                    self.keypad[5] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::E),
-                    ..
-                } => {
-                    self.keypad[6] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::R),
-                    ..
-                } => {
-                    self.keypad[7] = false;
-                }
-
-                Event::KeyUp {
-                    keycode: Some(Keycode::A),
-                    ..
-                } => {
-                    self.keypad[8] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::S),
-                    ..
-                } => {
-                    self.keypad[9] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::D),
-                    ..
-                } => {
-                    self.keypad[10] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::F),
-                    ..
-                } => {
-                    self.keypad[11] = false;
-                }
-                Event::KeyUp {
-                    keycode: Some(Keycode::Z),
-                    ..
-                } => {
+                Event::KeyUp {keycode: Some(Keycode::Num4),..} => {
                     self.keypad[12] = false;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::X),
-                    ..
-                } => {
+                Event::KeyUp {keycode: Some(Keycode::Q),..} => {
+                    self.keypad[4] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::W),..} => {
+                    self.keypad[5] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::E),..} => {
+                    self.keypad[6] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::R),..} => {
                     self.keypad[13] = false;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::C),
-                    ..
-                } => {
+                Event::KeyUp {keycode: Some(Keycode::A),..} => {
+                    self.keypad[7] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::S),..} => {
+                    self.keypad[8] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::D),..} => {
+                    self.keypad[9] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::F),..} => {
                     self.keypad[14] = false;
                 }
-                Event::KeyUp {
-                    keycode: Some(Keycode::V),
-                    ..
-                } => {
+                Event::KeyUp {keycode: Some(Keycode::Z),..} => {
+                    self.keypad[10] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::X),..} => {
+                    self.keypad[0] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::C),..} => {
+                    self.keypad[11] = false;
+                }
+                Event::KeyUp {keycode: Some(Keycode::V),..} => {
                     self.keypad[15] = false;
                 }
                 _ => {}

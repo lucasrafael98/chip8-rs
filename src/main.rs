@@ -10,11 +10,10 @@ fn main() {
     let sdl_context = sdl2::init().unwrap();
     let video_subsystem = sdl_context.video().unwrap();
     let events = sdl_context.event_pump().unwrap();
-    let window = video_subsystem
-        .window("rust-sdl2: chip8", 64 * SCALE, 32 * SCALE)
-        .position_centered()
-        .build()
-        .unwrap();
+    let window = video_subsystem.window("rust-sdl2: chip8", 64 * SCALE, 32 * SCALE)
+                                .position_centered()
+                                .build()
+                                .unwrap();
 
     let canvas = window.into_canvas().build().unwrap();
 
